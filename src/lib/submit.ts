@@ -8,23 +8,7 @@ export interface SubmitResult {
   error?: string;
 }
 
-/**
- * ⚠️ AJUSTAR A TU BACKEND
- *
- * Como ya tienes un backend que recibe el formulario, esta función construye
- * un `FormData` con una convención razonable por defecto:
- *   - Cada pregunta va como una entrada con su `id` como nombre de campo
- *     (ver los ids en schema.ts, ej. "full_name", "housing_location"...).
- *   - Los checkbox-group (selección múltiple) van como `${id}[]`, una
- *     entrada por valor seleccionado.
- *   - Los archivos van con el id del campo como nombre, una entrada por
- *     archivo (ej. 3 fotos = 3 entradas "photos").
- *   - Se agrega "submitted_at" con la fecha/hora ISO del envío.
- *
- * Si tu backend espera otros nombres de campo o un JSON en vez de
- * multipart/form-data, este es el único archivo que necesitas tocar.
- */
-const ENDPOINT = import.meta.env.PUBLIC_FORM_ENDPOINT as string | undefined;
+const ENDPOINT = "/api/send-form";
 
 export async function buildFormData(values: FormValues): Promise<FormData> {
   const formData = new FormData();

@@ -1,11 +1,26 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import Wizard from '../components/wizard/Wizard';
 ---
 
-<Layout>
-	<Welcome />
+<Layout
+  title="Registro de daños — Campaña de reconstrucción"
+  description="Cuéntanos sobre los daños de tu vivienda para postularte a la campaña de ayuda."
+>
+  <header class="mx-auto max-w-lg px-4 pt-6 pb-3">
+    <p class="text-[13px] font-medium uppercase tracking-wide text-(--color-brick-dark)">
+      Campaña de reconstrucción — Cali y Pereira
+    </p>
+    <h1 class="mt-1 font-display text-[26px] leading-tight text-(--color-ink)">
+      Cuéntanos qué pasó con tu vivienda
+    </h1>
+  </header>
+
+  <main>
+    <Wizard client:idle />
+  </main>
+
+  <footer class="mx-auto max-w-lg px-4 py-8 text-center text-sm text-(--color-slate)">
+    ¿Prefieres que alguien te ayude a llenarlo por teléfono? <!-- TODO: agregar número/canal de contacto -->
+  </footer>
 </Layout>

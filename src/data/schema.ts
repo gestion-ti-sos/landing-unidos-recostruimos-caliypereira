@@ -6,19 +6,29 @@ import { eq, not } from './conditions';
  *
  * Este esquema se construyó a partir de un resumen narrativo del formulario,
  * no del formulario fuente con los asteriscos marcados campo por campo.
- * Dos cosas quedaron como mejor inferencia y las marqué con TODO inline:
  *
- * 1. Sección 2 (requisitos): las opciones de "afectaciones" dicen basarse en
- *    "las cuatro del informe" — no tengo el texto de ese informe, así que
- *    puse 4 categorías placeholder. Cambialas por las reales antes de
- *    publicar (buscá "TODO: informe" en este archivo).
- * 2. El campo `required` de cada pregunta: el resumen solo confirma
+ * 1. Sección 2 (requisitos): la pregunta de "¿qué tipo de afectaciones tiene
+ *    la vivienda?" se fusionó con la de sección 6 "¿qué partes de la
+ *    vivienda se afectaron?" — ahora es una sola pregunta (`damage_types`,
+ *    en sección 2) con la lista granular de partes + las dos opciones
+ *    "fuera de alcance" (`solo_esteticos`, `estructural_severo`). El TODO
+ *    anterior sobre "las 4 categorías del informe" queda resuelto por esta
+ *    fusión — si igual necesitas validar la redacción contra el informe
+ *    original, hazlo sobre estas opciones granulares.
+ * 2. Ojo con `eligibility.ts`: si esa lógica lee `values.damage_types` con
+ *    los values `solo_esteticos` / `estructural_severo` (que se conservaron
+ *    igual), no debería requerir cambios. Si hace algo distinto, revisar.
+ * 3. El campo `affected_parts` ya NO se envía (se fusionó, ver punto 1).
+ *    Si tu plantilla de correo (Handlebars) o el DTO del backend lo esperan
+ *    explícitamente, hay que actualizarlos para leer `damage_types`.
+ * 4. El campo `required` de cada pregunta: el resumen solo confirma
  *    explícitamente cuáles son opcionales/obligatorias en varios casos
  *    puntuales (uso de imagen, correo, estrato, enlace de Maps,
  *    vulnerabilidad, "documento del concepto"). Para el resto inferí lo más
- *    razonable dado el propósito de cada sección. El documento fuente dice
- *    39 preguntas obligatorias en total — contá las `required: true` /
- *    `requiredIf` de abajo y ajustá si no coincide con el formulario real.
+ *    razonable dado el propósito de cada sección. El documento fuente decía
+ *    39 preguntas obligatorias en total — con la fusión del punto 1 ese
+ *    número baja en 1; contá las `required: true` / `requiredIf` de abajo
+ *    y ajustá si no coincide con el formulario real.
  */
 
 export const sections: Section[] = [
@@ -95,23 +105,32 @@ export const sections: Section[] = [
         options: [
           { value: 'cali', label: 'Cali' },
           { value: 'pereira', label: 'Pereira' },
-          { value: 'otro', label: 'Otro municipio', outOfScope: true },
+          { value: 'otro', label: 'Otro municipio', outOfScope: true, requiresDetail: true },
         ],
       },
       {
         id: 'damage_types',
         section: 2,
         type: 'checkbox-group',
-        label: '¿Qué tipo de afectaciones tiene la vivienda?',
-        helpText: 'Selecciona todas las que apliquen.',
+        label: '¿Qué partes de la vivienda se afectaron?',
+        helpText:
+          'Selecciona todas las que apliquen. Esta pregunta también nos ayuda a saber si tu caso corresponde a esta campaña.',
         required: true,
         minSelected: 1,
         options: [
-          // TODO: informe — reemplazar por las 4 categorías reales del informe de la campaña.
-          { value: 'grietas_muros_columnas', label: 'Grietas en muros, columnas o vigas' },
-          { value: 'techo_cubierta', label: 'Techo o cubierta afectada' },
-          { value: 'elementos_no_estructurales', label: 'Puertas, ventanas u otros elementos no estructurales' },
-          { value: 'servicios_basicos', label: 'Daño en instalaciones de servicios básicos' },
+          { value: 'techo', label: 'Techo / cubierta' },
+          { value: 'muros_exteriores', label: 'Muros exteriores' },
+          { value: 'muros_interiores', label: 'Muros interiores' },
+          { value: 'columnas_vigas', label: 'Columnas o vigas' },
+          { value: 'piso', label: 'Piso / cimentación' },
+          { value: 'puertas_ventanas', label: 'Puertas o ventanas' },
+          { value: 'escaleras', label: 'Escaleras' },
+          { value: 'cocina', label: 'Cocina' },
+          { value: 'baño', label: 'Baño' },
+          { value: 'instalacion_electrica', label: 'Instalación eléctrica' },
+          { value: 'instalacion_hidraulica', label: 'Instalación hidráulica / sanitaria' },
+          { value: 'fachada', label: 'Fachada' },
+          { value: 'otro', label: 'Otro', requiresDetail: true },
           { value: 'solo_esteticos', label: 'Solo daños estéticos (pintura, acabados)', outOfScope: true },
           {
             value: 'estructural_severo',
@@ -165,7 +184,7 @@ export const sections: Section[] = [
           { value: 'ppt', label: 'Permiso de Protección Temporal (PPT)' },
           { value: 'ti_rc', label: 'Tarjeta de identidad / Registro civil' },
           { value: 'pasaporte', label: 'Pasaporte' },
-          { value: 'otro', label: 'Otro' },
+          { value: 'otro', label: 'Otro', requiresDetail: true },
         ],
       },
       {
@@ -221,7 +240,7 @@ export const sections: Section[] = [
           { value: 'propietario_sin_escritura', label: 'Propietario, sin escritura' },
           { value: 'arrendatario', label: 'Arrendatario' },
           { value: 'familiar', label: 'Familiar de quien vive allí' },
-          { value: 'otro', label: 'Otro' },
+          { value: 'otro', label: 'Otro', requiresDetail: true },
         ],
       },
       {
@@ -398,7 +417,7 @@ export const sections: Section[] = [
   },
 
   // ────────────────────────────────────────────────────────────────
-  // 6. ESTADO DE LA VIVIENDA Y DAÑOS — 15 preguntas
+  // 6. ESTADO DE LA VIVIENDA Y DAÑOS — 14 preguntas
   // ────────────────────────────────────────────────────────────────
   {
     id: 'vivienda-danos',
@@ -417,7 +436,7 @@ export const sections: Section[] = [
           { value: 'casa', label: 'Casa' },
           { value: 'apartamento', label: 'Apartamento' },
           { value: 'cuarto_arrendado', label: 'Cuarto o habitación arrendada' },
-          { value: 'otro', label: 'Otro' },
+          { value: 'otro', label: 'Otro', requiresDetail: true },
         ],
       },
       {
@@ -450,30 +469,6 @@ export const sections: Section[] = [
         label: 'Si tuviste que salir, ¿dónde estás durmiendo actualmente?',
         visibleIf: not(eq('can_inhabit_today', 'si')),
         requiredIf: not(eq('can_inhabit_today', 'si')),
-      },
-      {
-        id: 'affected_parts',
-        section: 6,
-        type: 'checkbox-group',
-        label: '¿Qué partes de la vivienda se afectaron?',
-        helpText: 'Selecciona todas las que apliquen.',
-        required: true,
-        minSelected: 1,
-        options: [
-          { value: 'techo', label: 'Techo / cubierta' },
-          { value: 'muros_exteriores', label: 'Muros exteriores' },
-          { value: 'muros_interiores', label: 'Muros interiores' },
-          { value: 'columnas_vigas', label: 'Columnas o vigas' },
-          { value: 'piso', label: 'Piso / cimentación' },
-          { value: 'puertas_ventanas', label: 'Puertas o ventanas' },
-          { value: 'escaleras', label: 'Escaleras' },
-          { value: 'cocina', label: 'Cocina' },
-          { value: 'baño', label: 'Baño' },
-          { value: 'instalacion_electrica', label: 'Instalación eléctrica' },
-          { value: 'instalacion_hidraulica', label: 'Instalación hidráulica / sanitaria' },
-          { value: 'fachada', label: 'Fachada' },
-          { value: 'otro', label: 'Otro' },
-        ],
       },
       {
         id: 'services_not_working',
@@ -793,7 +788,7 @@ export const sections: Section[] = [
           { value: 'un_donante', label: 'Un donante' },
           { value: 'comunidad_vecinos', label: 'La comunidad o vecinos' },
           { value: 'medios_comunicacion', label: 'Medios de comunicación' },
-          { value: 'otro', label: 'Otro' },
+          { value: 'otro', label: 'Otro', requiresDetail: true },
         ],
       },
       {

@@ -1,11 +1,12 @@
 import type { ComponentChildren } from 'preact';
 import type { Field, FieldValue, FormValues } from '../../data/types';
 import { formatBytes } from '../../lib/media';
+import { fieldRequiresOtherDetail, getOtherDetailFieldId } from '../../lib/other-detail';
 
 interface Props {
   field: Field;
   values: FormValues;
-  error?: string;
+  errors: Record<string, string>;
   required: boolean;
   onChange: (id: string, value: FieldValue) => void;
 }
@@ -43,8 +44,53 @@ function FieldShell({ field, error, required, children }: { field: Field; error?
   );
 }
 
-export default function FieldRenderer({ field, values, error, required, onChange }: Props) {
+/** Campo de texto libre que aparece cuando la opción seleccionada tiene
+ * `requiresDetail: true` (normalmente "Otro"). Ver lib/otherDetail.ts. */
+function OtherDetailInput({
+  field,
+  values,
+  errors,
+  onChange,
+}: {
+  field: Field;
+  values: FormValues;
+  errors: Record<string, string>;
+  onChange: (id: string, value: FieldValue) => void;
+}) {
+  if (!fieldRequiresOtherDetail(field, values)) return null;
+
+  const detailId = getOtherDetailFieldId(field);
+  const detailError = errors[detailId];
+  const detailValue = (values[detailId] as string) ?? '';
+
+  return (
+    <div class="ml-1 flex flex-col gap-1.5 border-l-2 border-(--color-line) pl-3.5">
+      <label for={detailId} class="text-sm font-medium text-(--color-ink)">
+        Cuéntanos cuál
+      </label>
+      <input
+        id={detailId}
+        name={detailId}
+        type="text"
+        class={`${inputClass} ${detailError ? errorInputClass : ''}`}
+        value={detailValue}
+        placeholder="Especifica aquí"
+        aria-invalid={Boolean(detailError)}
+        aria-describedby={detailError ? `${detailId}-error` : undefined}
+        onInput={(e) => onChange(detailId, (e.target as HTMLInputElement).value)}
+      />
+      {detailError && (
+        <p id={`${detailId}-error`} class="text-sm font-medium text-(--color-brick-dark)" role="alert">
+          {detailError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function FieldRenderer({ field, values, errors, required, onChange }: Props) {
   const value = values[field.id];
+  const error = errors[field.id];
   const describedBy = [field.helpText ? `${field.id}-help` : null, error ? `${field.id}-error` : null]
     .filter(Boolean)
     .join(' ') || undefined;
@@ -164,6 +210,7 @@ export default function FieldRenderer({ field, values, error, required, onChange
               </option>
             ))}
           </select>
+          <OtherDetailInput field={field} values={values} errors={errors} onChange={onChange} />
         </FieldShell>
       );
 
@@ -193,6 +240,7 @@ export default function FieldRenderer({ field, values, error, required, onChange
               );
             })}
           </div>
+          <OtherDetailInput field={field} values={values} errors={errors} onChange={onChange} />
         </FieldShell>
       );
 
@@ -226,6 +274,7 @@ export default function FieldRenderer({ field, values, error, required, onChange
               );
             })}
           </div>
+          <OtherDetailInput field={field} values={values} errors={errors} onChange={onChange} />
         </FieldShell>
       );
     }

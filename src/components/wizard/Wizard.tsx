@@ -14,8 +14,16 @@ const REQUISITOS_INDEX = sections.findIndex((s) => s.id === 'requisitos');
 type Phase = 'form' | 'eligibility-notice' | 'submitting' | 'success' | 'error';
 
 export default function Wizard() {
-  const { values, updateValue, savedLabel, resumeAvailable, dismissResumeBanner, initialStep, discardDraft } =
-    useFormDraft();
+  const {
+    values,
+    updateValue,
+    savedLabel,
+    resumeAvailable,
+    dismissResumeBanner,
+    initialStep,
+    discardDraft,
+    getElapsedSeconds,
+  } = useFormDraft();
 
   const [step, setStep] = useState(initialStep);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,7 +80,7 @@ export default function Wizard() {
 
   async function handleSubmit() {
     setPhase('submitting');
-    const result = await submitForm(values);
+    const result = await submitForm(values, { durationSeconds: getElapsedSeconds() });
     if (result.ok) {
       discardDraft();
       setPhase('success');
@@ -175,11 +183,16 @@ export default function Wizard() {
         )}
 
         {step === 0 && !resumeAvailable && (
-          <p class="mb-5 text-[15px] text-(--color-slate)">
-            Son unas 60 preguntas, pero la mayoría son cortas y varias no te van a aplicar. Una familia toma en
-            promedio entre 35 y 40 respuestas. Puedes cerrar esta página en cualquier momento — tus respuestas se
-            guardan solas en este dispositivo.
-          </p>
+          <div class="mb-5 flex flex-col gap-2">
+            <span class="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#eef3f0] px-3 py-1 text-xs font-medium text-(--color-forest)">
+              ⏱ Tiempo estimado: 5 minutos
+            </span>
+            <p class="text-[15px] text-(--color-slate)">
+              Son unas 60 preguntas, pero la mayoría son cortas y varias no te van a aplicar. Una familia toma en
+              promedio entre 35 y 40 respuestas. Puedes cerrar esta página en cualquier momento — tus respuestas se
+              guardan solas en este dispositivo.
+            </p>
+          </div>
         )}
 
         {section.description && <p class="mb-5 text-[15px] text-(--color-slate)">{section.description}</p>}
@@ -196,7 +209,7 @@ export default function Wizard() {
               key={field.id}
               field={field}
               values={values}
-              error={errors[field.id]}
+              errors={errors}
               required={isFieldRequired(field, values)}
               onChange={(id, val: FieldValue) => {
                 updateValue(id, val, step);

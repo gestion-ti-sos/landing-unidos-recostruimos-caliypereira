@@ -1,4 +1,5 @@
 import type { Field, FormValues } from '../data/types';
+import { fieldRequiresOtherDetail, getOtherDetailFieldId } from './other-detail';
 
 export function isFieldVisible(field: Field, values: FormValues): boolean {
   return field.visibleIf ? field.visibleIf(values) : true;
@@ -87,12 +88,23 @@ export function validateField(field: Field, values: FormValues): string | null {
   }
 }
 
-/** Valida todos los campos visibles de una sección. Devuelve un mapa id -> error. */
+/** Valida todos los campos visibles de una sección. Devuelve un mapa id -> error.
+ * Incluye también el campo de detalle libre de "Otro" cuando corresponda
+ * (ver lib/otherDetail.ts), bajo la key `${field.id}__otro_detalle`. */
 export function validateSection(fields: Field[], values: FormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const field of fields) {
     const err = validateField(field, values);
     if (err) errors[field.id] = err;
+
+    if (fieldRequiresOtherDetail(field, values)) {
+      const detailId = getOtherDetailFieldId(field);
+      const detailValue = values[detailId];
+      const isEmpty = detailValue === undefined || (typeof detailValue === 'string' && detailValue.trim() === '');
+      if (isEmpty) {
+        errors[detailId] = 'Cuéntanos brevemente cuál.';
+      }
+    }
   }
   return errors;
 }

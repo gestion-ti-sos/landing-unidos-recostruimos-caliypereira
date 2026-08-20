@@ -26,6 +26,7 @@ export interface Option {
   /** Marca la opción como "fuera de alcance" (se registra pero no bloquea
    * necesariamente el envío) — usado en la sección 2. */
   outOfScope?: boolean;
+  requiresDetail?: boolean;
 }
 
 interface BaseField {

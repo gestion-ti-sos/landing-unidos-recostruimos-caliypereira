@@ -549,7 +549,7 @@ export const sections: Section[] = [
         compressImages: true,
         required: false,
       },
-      {
+      /* {
         id: 'videos',
         section: 6,
         type: 'file',
@@ -560,7 +560,7 @@ export const sections: Section[] = [
         maxFiles: 2,
         maxSizeMB: 5,
         required: false,
-      },
+      }, */
       {
         id: 'external_media_link',
         section: 6,

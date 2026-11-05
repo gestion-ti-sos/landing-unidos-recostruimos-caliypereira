@@ -5,22 +5,24 @@ import { createHmac } from "node:crypto";
  *
  *   payload = `${method}:${originalUrl}:${timestamp}:${JSON.stringify(req.body ?? {})}`
  *
- * El guard lee `req.body` — pero en Nest los Guards corren ANTES que los
+ * El guard lee `req.body`, pero en Nest los Guards corren ANTES que los
  * Interceptors (Middleware → Guards → Interceptors → Pipes → Handler), y
  * `FileFieldsInterceptor`/multer es un Interceptor. Como el Content-Type es
- * `multipart/form-data`, ningún body-parser global (que solo mira
- * json/urlencoded) lo toca tampoco. Entonces, en el momento exacto en que
- * el guard evalúa `req.body`, ese valor SIEMPRE es `undefined` → `{}` —
- * sin importar cuántos campos o fotos traiga el multipart real. Por eso
- * firmamos sobre el string literal `"{}"`, no sobre los bytes del body.
+ * `multipart/form-data`, ningún body-parser global lo toca. Por eso, cuando el
+ * guard evalúa `req.body`, ese valor es `undefined` → `{}`, y firmamos sobre
+ * el string literal `"{}"`, no sobre los bytes del body.
  */
 
-const MAX_BODY_BYTES = 4 * 1024 * 1024; // 4 MB — techo propio, más abajo del límite duro de 4.5MB de Vercel
+const MAX_BODY_BYTES = 4 * 1024 * 1024; // 4 MB, por debajo del límite de 4.5MB de Vercel
 
 const NEST_API_BASE_URL = process.env.API_BASE_URL!;
 const NEST_FORM_PATH = "/email/send-todos-unidos-cali-pereira";
 const CLIENT_ID = process.env.EMAIL_CLIENT_ID!;
 const CLIENT_SECRET = process.env.EMAIL_CLIENT_SECRET!;
+
+const MAX_ATTEMPTS = 3;
+const ATTEMPT_TIMEOUT_MS = 10_000;
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
 
 interface SignRequestParams {
   method: string;
@@ -29,10 +31,15 @@ interface SignRequestParams {
 }
 
 function signRequest({ method, path, secret }: SignRequestParams) {
+  // Se calcula en cada intento: el guard acepta timestamps de máximo 5 minutos.
   const timestamp = Date.now().toString();
   const payload = `${method}:${path}:${timestamp}:${JSON.stringify({})}`;
   const signature = createHmac("sha256", secret).update(payload).digest("hex");
   return { timestamp, signature };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 class PayloadTooLargeError extends Error {}
@@ -42,6 +49,20 @@ function jsonResponse(status: number, body: unknown): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Convierte la respuesta de error del backend en la respuesta al cliente,
+ * conservando el status real aunque el cuerpo no sea JSON.
+ */
+function backendErrorResponse(status: number, responseText: string): Response {
+  const clientStatus = status >= 400 ? status : 502;
+  try {
+    const parsed = JSON.parse(responseText);
+    return jsonResponse(clientStatus, parsed);
+  } catch {
+    return jsonResponse(clientStatus, { error: "No se pudo enviar el formulario" });
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -85,39 +106,59 @@ export async function POST(request: Request): Promise<Response> {
 
   console.log(`[send-form] body leído desde request.arrayBuffer(): ${rawBody.length} bytes`);
 
-  const { timestamp, signature } = signRequest({
-    method: "POST",
-    path: `/api${NEST_FORM_PATH}`,
-    secret: CLIENT_SECRET,
-  });
-
-  try {
-    const nestResponse = await fetch(`${NEST_API_BASE_URL}${NEST_FORM_PATH}`, {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const isLastAttempt = attempt === MAX_ATTEMPTS;
+    const { timestamp, signature } = signRequest({
       method: "POST",
-      headers: {
-        "Content-Type": contentType,
-        "x-client-id": CLIENT_ID,
-        "x-timestamp": timestamp,
-        "x-signature": signature,
-      },
-      body: rawBody,
+      path: `/api${NEST_FORM_PATH}`,
+      secret: CLIENT_SECRET,
     });
 
-    const responseText = await nestResponse.text();
+    try {
+      const nestResponse = await fetch(`${NEST_API_BASE_URL}${NEST_FORM_PATH}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": contentType,
+          "x-client-id": CLIENT_ID,
+          "x-timestamp": timestamp,
+          "x-signature": signature,
+        },
+        body: rawBody,
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+      });
 
-    if (!nestResponse.ok) {
-      console.error("Error backend Coral:", nestResponse.status, responseText);
-      try {
-        const parsed = JSON.parse(responseText);
-        return jsonResponse(nestResponse.status, parsed);
-      } catch {
-        return jsonResponse(502, { error: "No se pudo enviar el formulario" });
+      const responseText = await nestResponse.text();
+
+      if (nestResponse.ok) {
+        return jsonResponse(200, { success: true });
       }
-    }
 
-    return jsonResponse(200, { success: true });
-  } catch (err) {
-    console.error("Error de red llamando a Coral backend:", err);
-    return jsonResponse(502, { error: "No se pudo enviar el formulario" });
+      console.error(
+        `[send-form] intento ${attempt}/${MAX_ATTEMPTS} — backend ${nestResponse.status}:`,
+        responseText.slice(0, 500),
+      );
+
+      if (RETRYABLE_STATUS.has(nestResponse.status) && !isLastAttempt) {
+        await sleep(500 * attempt);
+        continue;
+      }
+
+      return backendErrorResponse(nestResponse.status, responseText);
+    } catch (err) {
+      console.error(
+        `[send-form] intento ${attempt}/${MAX_ATTEMPTS} — error de red o timeout:`,
+        err,
+      );
+
+      if (!isLastAttempt) {
+        await sleep(500 * attempt);
+        continue;
+      }
+
+      return jsonResponse(502, { error: "No se pudo enviar el formulario" });
+    }
   }
+
+  // No se alcanza, pero TypeScript necesita un retorno explícito.
+  return jsonResponse(502, { error: "No se pudo enviar el formulario" });
 }
